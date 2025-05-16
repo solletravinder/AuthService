@@ -5,19 +5,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.database import get_db, create_tables
 from app.schemas import UserCreate, Token
-from app.auth import (
-    get_oauth_client,
-    create_access_token,
-    verify_token,
-    generate_state_token,
-    verify_state_token,
-    JWTBearer
-)
-from app.crud.users import (
-    create_or_update_user,
-    get_user_by_email
-)
-from app.auth.password import authenticate_user
+from app.auth.oauth2 import get_oauth_client
+from app.auth.jwt import create_access_token, verify_token
+from app.auth.password import get_password_hash, authenticate_user
+from app.auth.security import JWTBearer, generate_state_token, verify_state_token
+from app.crud.users import create_or_update_user, get_user_by_email, create_user
 from app.auth.cookie_utils import set_cookie
 from config import settings
 
@@ -49,13 +41,11 @@ async def register_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
-    
-    # user = create_user(db, user_data)
-    # Registration logic not implemented in crud/users.py
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="User registration not implemented"
-    )
+    hashed_password = get_password_hash(user_data.password)
+    user = create_user(db, user_data, hashed_password)
+    access_token = create_access_token({"sub": user.email})
+    set_cookie(response, "access_token", access_token)
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @app.post("/auth/login", response_model=Token)
 async def login_user(
